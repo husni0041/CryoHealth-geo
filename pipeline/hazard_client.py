@@ -31,10 +31,14 @@ def report_hazard_score(
     tier: str,
     components: dict,
     computed_at: datetime | None = None,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+    estimated_window: str | None = None,
 ) -> dict:
     """POSTs a hazard score to CryoHealth-api. Raises on any non-2xx response — a failed
     report must be visible (surfaced as a per-lake error by the caller), never silently
-    swallowed."""
+    swallowed. Impact-window values are forwarded only when a source supplies them;
+    the satellite-observation lookback is not a forecast and must not be used as one."""
     payload = {
         "lakeId": lake_id,
         "runId": run_id,
@@ -43,6 +47,12 @@ def report_hazard_score(
         "components": components,
         "computedAt": (computed_at or datetime.now(UTC)).isoformat(),
     }
+    if window_start is not None:
+        payload["windowStart"] = window_start.isoformat()
+    if window_end is not None:
+        payload["windowEnd"] = window_end.isoformat()
+    if estimated_window is not None:
+        payload["estimatedWindow"] = estimated_window
     resp = httpx.post(
         f"{_base_url()}/alerts/hazard-scores",
         json=payload,

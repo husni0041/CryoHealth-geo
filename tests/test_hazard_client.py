@@ -43,6 +43,29 @@ def test_report_hazard_score_sends_the_api_key_header_and_full_payload(monkeypat
         "computedAt": "2026-07-20T00:00:00+00:00",
     }
 
+def test_report_hazard_score_forwards_a_source_provided_impact_window(monkeypatch):
+    monkeypatch.setenv("CRYOHEALTH_API_KEY", "test-key-value")
+    fake_resp = MagicMock(status_code=201)
+    fake_resp.json.return_value = {"alert": {"id": "alert-1"}, "deduped": False}
+    fake_resp.raise_for_status.return_value = None
+
+    with patch("pipeline.hazard_client.httpx.post", return_value=fake_resp) as mock_post:
+        report_hazard_score(
+            lake_id="lake-1",
+            run_id="run-1",
+            score=0.9,
+            tier="high",
+            components={},
+            window_start=datetime(2026, 7, 20, tzinfo=UTC),
+            window_end=datetime(2026, 7, 21, tzinfo=UTC),
+            estimated_window="Next 24 hours",
+        )
+
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["windowStart"] == "2026-07-20T00:00:00+00:00"
+    assert payload["windowEnd"] == "2026-07-21T00:00:00+00:00"
+    assert payload["estimatedWindow"] == "Next 24 hours"
+
 
 def test_report_hazard_score_raises_without_an_api_key(monkeypatch):
     monkeypatch.delenv("CRYOHEALTH_API_KEY", raising=False)
