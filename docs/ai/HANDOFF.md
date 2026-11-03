@@ -1,4 +1,25 @@
-# HANDOFF — CryoHealth-geo — 2026-09-22 PKT
+# HANDOFF — CryoHealth-geo — 2026-11-03
+Session: issue-2-impact-window-contract  Branch: feat/issue-2-impact-window-contract  Task: forward source-backed alert windows
+
+## Current state
+Local branch `feat/issue-2-impact-window-contract` adds optional `windowStart`, `windowEnd`, and `estimatedWindow` fields to the hazard-score API client. The branch push was rejected with HTTP 403, so no PR exists yet.
+
+## Done this session
+- Added optional impact-window fields to the outbound hazard alert payload, forwarding values only when the caller provides them.
+- Added a mocked API-client test for all three fields.
+- Focused geo tests: 5 passed.
+
+## Not done / deferred
+- The current hazard model has no forecast source and does not compute an impact window. Do not infer one from satellite observation lookback or fabricate a timeframe.
+- Push this branch and open a PR against `main` once repository write access is available. Link it to CryoHealth-api PR #31.
+- End-to-end impact-window delivery remains unverified until a real source supplies a window.
+
+## Next action
+Run the geo CI checks after the branch is pushed; coordinate a source-backed forecast contract before populating automatic alert windows.
+
+---
+
+## Previous handoff — 2026-09-22
 Session: harness-handoff-hygiene  Model: claude-sonnet-5  Branch: main  Goal: none  Task: none (docs hygiene)
 
 ## State
