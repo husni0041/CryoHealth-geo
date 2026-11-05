@@ -1,46 +1,57 @@
-# HANDOFF — CryoHealth-geo — 2026-09-22 PKT
-Session: harness-handoff-hygiene  Model: claude-sonnet-5  Branch: main  Goal: none  Task: none (docs hygiene)
+# HANDOFF — CryoHealth-geo — 2026-11-05 PKT
+Session: sns-webhook-review  Model: claude-sonnet-5-5  Branch: feat/23-aws-sns-stac-webhook  Goal: none  Task: #23
 
 ## State
-Deployed and running on Hetzner, stable, real CDSE credentials wired in. A full
-observation+hazard pass against real Sentinel-2 data has since completed end-to-end
-(confirmed via CryoHealth-api's `/lakes` returning real, non-default hazard tiers) — the
-prior handoff's open item ("watch the next scheduled run complete") is resolved. Working
-tree clean on `main`. This pass only archives the prior (single-session, 77-line) HANDOFF
-and replaces it with a current-state version.
+PR #28 (fork `husni0041/CryoHealth-geo` → `uExel/CryoHealth-geo:main`) adds
+`POST /webhooks/stac-event`, which accepts signed AWS SNS envelopes, verifies the RSA
+signature against the one configured `AWS_SNS_TOPIC_ARN`, confirms subscriptions, and
+queues the existing observation + hazard pass in the background. Code-complete and
+mocked-tested; **not** verified against a live SNS topic.
 
 ## Done this session
-- Archived the previous HANDOFF.md to
-  `docs/ai/sessions/2026-08-09-hetzner-tunnel-deploy-handoff.md` and replaced it with this
-  template-sized version, per `skills/handoff/SKILL.md` step 1.
+- Reviewed PR #28 against issue #23's tasks and acceptance criteria.
+- Fixed a real defect: AWS SNS posts its JSON envelope as `Content-Type: text/plain`, which
+  the typed `payload: dict` endpoint rejected with 422 (so real SNS delivery and
+  subscription confirmation would have failed). The endpoint now reads the raw body,
+  returns 400 on malformed JSON, and runs the blocking verify/confirm calls in a threadpool.
+- Added `_event_job`: bursts of notifications (one per scene) now coalesce into one running
+  pass plus at most one queued follow-up, instead of N concurrent full passes.
+- Added tests: text/plain body, malformed JSON (400), invalid signature (401), burst
+  coalescing, recovery after a failed pass.
 
 ## Not done / deferred
-- Only 6 lakes seeded/monitored against the eventual 25+ target (see Next action)
+- Live verification: set `AWS_SNS_TOPIC_ARN`, expose a public HTTPS endpoint, subscribe the
+  topic with a Sentinel-2 filter policy, and confirm a real event drives observation +
+  hazard scoring (issue #23's "within 3 minutes" criterion is unproven until then).
+- Sentinel-1 ingestion is unsupported by the pipeline; issue #23 mentions it. The issue's
+  HMAC-SHA256 wording is superseded by SNS RSA signature verification (AWS signs with RSA).
+- No AOI filtering in the service: any valid notification triggers a pass; scope the SNS
+  topic/filter policy to Gilgit-Baltistan Sentinel-2 acquisitions.
 
 ## Next action
-Issue **#4** (p1): import the full ICIMOD/GLOF-II lake inventory (25+) from a real
-geodata source.
+Merge PR #28, then deploy with `AWS_SNS_TOPIC_ARN` set and run the live SNS check above;
+only then tick issue #23's acceptance criteria.
 
 ## Open questions for a human
-- none blocking
+- Which AWS SNS topic ARN / public hostname will production subscribe to?
 
 ## Failed approaches (do not retry)
-- GitHub Actions "Re-run failed jobs" without confirming the modal — does nothing
-  silently; always screenshot to confirm
-- Making GHCR packages public instead of using a PAT — blocked by uExel org policy
-- `python:3.12-slim` + rasterio's wheel alone is not enough — needs `libexpat1` from apt;
-  always test-boot a freshly built image locally before assuming a slim base suffices
+- Typing the webhook body as `payload: dict` — FastAPI only JSON-parses
+  `application/json`, so SNS's `text/plain` delivery 422s. Read the raw body instead.
 
 ## Loops run
-- none (docs hygiene, not a build/verify loop)
+- Local `pytest` + `ruff check`: 71 passed. 2 failed + 2 errors in `test_cdse_source` /
+  `test_exposure` are environmental (rasterio picks up PostgreSQL's incompatible PROJ
+  database on this Windows machine) and unrelated to this change.
 
 ## Files touched
-docs/ai/HANDOFF.md, docs/ai/sessions/2026-08-09-hetzner-tunnel-deploy-handoff.md (new)
+pipeline/service.py, tests/test_service.py, docs/ai/HANDOFF.md
+(earlier on this branch: pipeline/sns_webhook.py, tests/test_sns_webhook.py, README.md,
+.env.example, pyproject.toml, uv.lock)
 
 ## Verification status
-Not re-run this pass. Last known: container stable, real CDSE-driven hazard pass
-confirmed complete (cross-referenced via CryoHealth-api). Re-verify before trusting
-against current `main`.
+`ruff check .` clean; `pytest` 71 passed with the 4 environmental failures noted above.
+No live AWS SNS or satellite calls were made.
 
 ## Resume with
 /uexel:orient

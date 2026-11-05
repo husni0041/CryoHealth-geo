@@ -22,14 +22,17 @@ scoring always sees that run's freshest observation (if any landed).
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 
 from pipeline.batch import run_latest
 from pipeline.hazard_batch import run_hazard_pass
@@ -83,6 +86,40 @@ def _daily_job() -> None:
     _run_hazard()
 
 
+_event_state = threading.Lock()
+_event_running = False
+_event_rerun = False
+
+
+def _event_job() -> None:
+    """Run the pipeline for a webhook event, coalescing bursts of notifications.
+
+    SNS can deliver many notifications close together (one per scene). Only one
+    event-driven pass runs at a time; notifications arriving mid-run queue exactly one
+    follow-up pass so a scene published during a run is still picked up.
+    """
+    global _event_running, _event_rerun
+    with _event_state:
+        if _event_running:
+            _event_rerun = True
+            logger.info("webhook: pipeline pass already running, queued one follow-up")
+            return
+        _event_running = True
+    try:
+        while True:
+            _daily_job()
+            with _event_state:
+                if not _event_rerun:
+                    _event_running = False
+                    return
+                _event_rerun = False
+    except BaseException:
+        with _event_state:
+            _event_running = False
+            _event_rerun = False
+        raise
+
+
 scheduler = AsyncIOScheduler()
 
 
@@ -118,20 +155,29 @@ def run_hazard_now() -> dict:
 
 
 @app.post("/webhooks/stac-event", status_code=202)
-def receive_stac_event(payload: dict, background_tasks: BackgroundTasks) -> dict:
+async def receive_stac_event(request: Request, background_tasks: BackgroundTasks) -> dict:
     topic_arn = os.environ.get(AWS_SNS_TOPIC_ARN_ENV)
     if not topic_arn:
         raise HTTPException(status_code=503, detail="AWS SNS webhook is not configured")
 
+    # AWS SNS posts its JSON envelope as Content-Type text/plain, which FastAPI's
+    # typed body parsing would reject, so parse the raw body regardless of content type.
     try:
-        message_type = verify_message(payload, topic_arn)
+        payload = json.loads(await request.body())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="AWS SNS request is not valid JSON") from exc
+
+    # verify/confirm make blocking HTTP calls (certificate fetch, SubscribeURL), so keep
+    # them off the event loop.
+    try:
+        message_type = await run_in_threadpool(verify_message, payload, topic_arn)
         if message_type == "SubscriptionConfirmation":
-            confirm_subscription(payload, topic_arn)
+            await run_in_threadpool(confirm_subscription, payload, topic_arn)
     except SnsWebhookError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     if message_type == "Notification":
-        background_tasks.add_task(_daily_job)
+        background_tasks.add_task(_event_job)
         return {"status": "accepted"}
     if message_type == "SubscriptionConfirmation":
         return {"status": "subscription confirmed"}
