@@ -37,6 +37,7 @@ from fastapi.concurrency import run_in_threadpool
 from pipeline.batch import run_latest
 from pipeline.hazard_batch import run_hazard_pass
 from pipeline.sns_webhook import SnsWebhookError, confirm_subscription, verify_message
+from pipeline.stac_event import should_process
 from pipeline.stac_source import PlanetaryComputerSource
 
 logger = logging.getLogger(__name__)
@@ -177,6 +178,13 @@ async def receive_stac_event(request: Request, background_tasks: BackgroundTasks
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
     if message_type == "Notification":
+        try:
+            relevant, reason = should_process(payload.get("Message"))
+        except ValueError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if not relevant:
+            logger.info("webhook: ignored notification: %s", reason)
+            return {"status": "ignored", "reason": reason}
         background_tasks.add_task(_event_job)
         return {"status": "accepted"}
     if message_type == "SubscriptionConfirmation":

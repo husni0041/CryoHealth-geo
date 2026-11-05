@@ -136,3 +136,46 @@ def test_event_job_recovers_after_a_failed_pass():
         service._event_job()
 
     daily_job.assert_called_once_with()
+
+
+def test_notification_for_an_irrelevant_scene_is_ignored(monkeypatch):
+    monkeypatch.setenv("AWS_SNS_TOPIC_ARN", TOPIC_ARN)
+    message = '{"collection": "sentinel-1-grd", "bbox": [74.5, 35.8, 74.9, 36.1]}'
+    with (
+        patch("pipeline.service.verify_message", return_value="Notification"),
+        patch("pipeline.service._daily_job") as daily_job,
+        TestClient(app) as client,
+    ):
+        response = client.post("/webhooks/stac-event", json={"Type": "Notification", "Message": message})
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "ignored"
+    daily_job.assert_not_called()
+
+
+def test_notification_for_a_monitored_sentinel2_scene_is_queued(monkeypatch):
+    monkeypatch.setenv("AWS_SNS_TOPIC_ARN", TOPIC_ARN)
+    message = '{"collection": "sentinel-2-l2a", "bbox": [74.5, 35.8, 74.9, 36.1]}'
+    with (
+        patch("pipeline.service.verify_message", return_value="Notification"),
+        patch("pipeline.service._daily_job") as daily_job,
+        TestClient(app) as client,
+    ):
+        response = client.post("/webhooks/stac-event", json={"Type": "Notification", "Message": message})
+
+    assert response.json() == {"status": "accepted"}
+    daily_job.assert_called_once_with()
+
+
+def test_invalid_bbox_configuration_returns_503(monkeypatch):
+    monkeypatch.setenv("AWS_SNS_TOPIC_ARN", TOPIC_ARN)
+    monkeypatch.setenv("STAC_EVENT_BBOX", "nonsense")
+    with (
+        patch("pipeline.service.verify_message", return_value="Notification"),
+        patch("pipeline.service._daily_job") as daily_job,
+        TestClient(app) as client,
+    ):
+        response = client.post("/webhooks/stac-event", json={"Type": "Notification", "Message": "{}"})
+
+    assert response.status_code == 503
+    daily_job.assert_not_called()

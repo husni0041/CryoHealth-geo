@@ -5,5 +5,8 @@ Python FastAPI geospatial service: Sentinel-2 lake monitoring, NDWI water extent
 For event-driven processing, subscribe the configured AWS SNS topic to
 `https://<geo-host>/webhooks/stac-event` and set `AWS_SNS_TOPIC_ARN`. The endpoint
 verifies SNS signatures, confirms subscriptions, then queues the existing observation
-and hazard pass. Configure the topic/filter policy to publish only relevant Sentinel
-acquisition events; live delivery also requires a reachable public HTTPS endpoint.
+and hazard pass. Notifications are skipped (HTTP 202, `status: ignored`) when the STAC item is
+not Sentinel-2 (Sentinel-1 is not ingested) or its footprint is outside `STAC_EVENT_BBOX`
+(default: approximate Gilgit-Baltistan); unreadable messages are processed rather than
+dropped. Still configure the topic/filter policy to publish only relevant acquisitions; live
+delivery also requires a reachable public HTTPS endpoint.
