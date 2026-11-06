@@ -284,6 +284,9 @@ def population_along_flowline(
         "method": "d8_flowline_corridor",
         "outlet_lon": outlet_lon,
         "outlet_lat": outlet_lat,
+        # DEM elevation at the start cell: lets a reader spot an outlet that is not at a
+        # lake (e.g. on a ridge) from the stored score alone. See HAZARD_METHODOLOGY.md.
+        "start_elevation_m": round(float(filled[outlet_row, outlet_col]), 0),
         "corridor_km": round(corridor_km, 2),
         "max_km": max_km,
         "corridor_half_width_m": corridor_half_width_m,

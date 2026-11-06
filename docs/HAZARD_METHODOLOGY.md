@@ -159,6 +159,18 @@ actually lie in the GLOF flood path.
   GLOF-II project reports or ICIMOD would supersede these estimates.
 - Exposure validation against Shishper/Passu GLOF flood footprints is pending
   Issue #26 — see ADR 0003.
+- **Live check, 2026-11-06 (Shishper, real GLO-30 DEM + WorldPop, 20 km flowline).** The
+  routing runs end to end (about 7 minutes cold, 290 MB). But the hand-estimated outlet
+  `(74.552, 36.421)` sits at **6,252 m** on the DEM, which is a peak, not a lake dam. The
+  lake point `(74.61, 36.40)` is at 4,046 m (the seeded coordinates are glacier-level, ADR
+  0002 in CryoHealth-api). Both flowlines reach the same Hunza valley floor (about 2,000 m,
+  near Aliabad), but the 20 km corridor population differs by about 2x depending on the
+  start: **2,434** from the outlet, **5,297** from the lake point (the old 5 km square
+  buffer gave 21.8). So the stored number is a *model estimate that is sensitive to where
+  the flowline starts*, not a census count. Replace the outlet coordinates with surveyed
+  dam-toe points, then re-run. The other five lakes and the full 50 km setting were not run
+  live (a 50 km window needs roughly 1 GB). `components.exposure.start_elevation_m` stores
+  the DEM elevation at the start so a bad outlet can be spotted from the stored score.
 - The confidence number is a heuristic (see above), not statistical; its cut-offs are
   uncalibrated.
 - Exposure runs the D8 routing on a ~100 km x 100 km DEM window in pure Python/numpy:

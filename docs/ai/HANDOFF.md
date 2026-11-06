@@ -1,46 +1,21 @@
-# HANDOFF — CryoHealth-geo — 2026-09-22 PKT
-Session: harness-handoff-hygiene  Model: claude-sonnet-5  Branch: main  Goal: none  Task: none (docs hygiene)
+# HANDOFF — CryoHealth-geo — 2026-11-06
+Session: flowpath-exposure-and-confidence  Model: claude-sonnet-5-5  Branch: feat/flowpath-exposure-and-confidence  Goal: API#13  Task: flow-path downstream population + per-score confidence
 
 ## State
-Deployed and running on Hetzner, stable, real CDSE credentials wired in. A full
-observation+hazard pass against real Sentinel-2 data has since completed end-to-end
-(confirmed via CryoHealth-api's `/lakes` returning real, non-default hazard tiers) — the
-prior handoff's open item ("watch the next scheduled run complete") is resolved. Working
-tree clean on `main`. This pass only archives the prior (single-session, 77-line) HANDOFF
-and replaces it with a current-state version.
+Not merged, not deployed. This branch brings the D8 flow-path exposure (written for #19 by laiba-107, only ever on the unmerged `AI-advances` branch) onto `main`, fixes what would break CI/production, and adds `components.confidence`. Full detail: `sessions/2026-11-06-flowpath-exposure-and-confidence-handoff.md`.
 
-## Done this session
-- Archived the previous HANDOFF.md to
-  `docs/ai/sessions/2026-08-09-hetzner-tunnel-deploy-handoff.md` and replaced it with this
-  template-sized version, per `skills/handoff/SKILL.md` step 1.
-
-## Not done / deferred
-- Only 6 lakes seeded/monitored against the eventual 25+ target (see Next action)
+## Key finding
+Live check on Shishper (real DEM + WorldPop, 20 km): routing works, but the hand-estimated outlet is at 6,252 m (a peak) and the result changes about 2x with the start point (2,434 from the outlet, 5,297 from the lake point, old square buffer 21.8). Treat the number as a model estimate until the outlet coordinates are surveyed. Only 1 of 6 lakes and 20 of 50 km were run live (4 GB machine).
 
 ## Next action
-Issue **#4** (p1): import the full ICIMOD/GLOF-II lake inventory (25+) from a real
-geodata source.
+Review and merge; deploy and run a hazard pass; replace the outlet coordinates in `pipeline/lakes.py`; run the 6 lakes at 50 km on a machine with more memory.
 
 ## Open questions for a human
-- none blocking
-
-## Failed approaches (do not retry)
-- GitHub Actions "Re-run failed jobs" without confirming the modal — does nothing
-  silently; always screenshot to confirm
-- Making GHCR packages public instead of using a PAT — blocked by uExel org policy
-- `python:3.12-slim` + rasterio's wheel alone is not enough — needs `libexpat1` from apt;
-  always test-boot a freshly built image locally before assuming a slim base suffices
-
-## Loops run
-- none (docs hygiene, not a build/verify loop)
-
-## Files touched
-docs/ai/HANDOFF.md, docs/ai/sessions/2026-08-09-hetzner-tunnel-deploy-handoff.md (new)
+- Who owns the alert policy and can confirm the confidence cut-offs (15 / 90 days)? — blocking: no
+- Where do surveyed dam-toe coordinates for the six lakes come from (GLOF-II reports, ICIMOD, imagery)? — blocking: no
 
 ## Verification status
-Not re-run this pass. Last known: container stable, real CDSE-driven hazard pass
-confirmed complete (cross-referenced via CryoHealth-api). Re-verify before trusting
-against current `main`.
+tests: 91/91 default suite, ruff clean, live: Shishper 20 km only
 
 ## Resume with
 /uexel:orient

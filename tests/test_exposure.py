@@ -376,6 +376,13 @@ def test_population_along_flowline_uses_corridor_not_buffer(tmp_path, fake_popul
     assert "population_along_corridor" in result
     assert result["flowline_cells"] >= 1
     assert result["corridor_km"] >= 0.0
+    # reproducibility: the outlet used and the DEM elevation at that start cell are stored
+    assert result["outlet_lon"] == 74.505
+    assert result["outlet_lat"] == 36.472
+    r = int((36.472 - dem_transform.f) / dem_transform.e)
+    c = int((74.505 - dem_transform.c) / dem_transform.a)
+    assert result["start_elevation_m"] == round(float(filled[r, c]), 0)
+    assert result["max_km"] == 1.0
 
 
 def test_population_along_flowline_positive_population(tmp_path, fake_population_raster):
