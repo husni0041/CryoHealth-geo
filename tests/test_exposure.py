@@ -18,7 +18,7 @@ Historical Shishper/Passu GLOF footprint validation:
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -321,7 +321,9 @@ def test_flowline_corridor_mask_single_point_creates_circle():
 
     transform = _make_fake_transform(pixel_deg=0.001)
     flowline_lonlat = [(74.505, 36.495)]  # near top-left of 20×20 grid
-    mask = flowline_corridor_mask(flowline_lonlat, corridor_half_width_m=2000.0, pop_transform=transform, pop_shape=(20, 20))
+    mask = flowline_corridor_mask(
+        flowline_lonlat, corridor_half_width_m=2000.0, pop_transform=transform, pop_shape=(20, 20)
+    )
 
     # Should have some True pixels around the flowline point.
     assert mask.any()
@@ -344,7 +346,6 @@ def test_flowline_corridor_mask_wider_corridor_covers_more_pixels():
 
 def test_population_along_flowline_uses_corridor_not_buffer(tmp_path, fake_population_raster):
     """population_along_flowline returns a dict with method='d8_flowline_corridor'."""
-    import rasterio as _rio
     from rasterio.transform import from_bounds as _fb
 
     rows, cols = 20, 20
@@ -355,7 +356,7 @@ def test_population_along_flowline_uses_corridor_not_buffer(tmp_path, fake_popul
     dem_transform = _fb(west, north - rows * pixel_deg, west + cols * pixel_deg, north, cols, rows)
 
     # Precompute D8 fields matching what fetch_dem_for_flowrouting returns.
-    from pipeline.dem import fill_pits, d8_flow_direction
+    from pipeline.dem import d8_flow_direction, fill_pits
     filled = fill_pits(elev)
     dx_m, dy_m = 30.0, 30.0
     direction = d8_flow_direction(filled, dx_m, dy_m)
@@ -379,9 +380,9 @@ def test_population_along_flowline_uses_corridor_not_buffer(tmp_path, fake_popul
 
 def test_population_along_flowline_positive_population(tmp_path, fake_population_raster):
     """With a populated raster, population along any valid corridor should be > 0."""
-    import rasterio as _rio
     from rasterio.transform import from_bounds as _fb
-    from pipeline.dem import fill_pits, d8_flow_direction
+
+    from pipeline.dem import d8_flow_direction, fill_pits
 
     rows, cols = 20, 20
     pixel_deg = 0.001
@@ -408,9 +409,9 @@ def test_population_along_flowline_positive_population(tmp_path, fake_population
 
 def test_population_within_buffer_backward_compat_key_present(fake_population_raster):
     """population_within_buffer always returns 'population_within_buffer' key."""
-    import rasterio as _rio
     from rasterio.transform import from_bounds as _fb
-    from pipeline.dem import fill_pits, d8_flow_direction
+
+    from pipeline.dem import d8_flow_direction, fill_pits
 
     rows, cols = 20, 20
     pixel_deg = 0.001
@@ -511,6 +512,64 @@ def test_population_within_buffer_larger_radius_covers_more_population(fake_popu
     assert large["population_within_buffer"] > small["population_within_buffer"]
 
 
+def test_dilate_disc_matches_a_brute_force_euclidean_distance_threshold():
+    """The numpy dilation must equal thresholding the exact distance to the nearest
+    flowline pixel (anisotropic pixels included)."""
+    import numpy as np
+
+    from pipeline.exposure import _dilate_disc
+
+    rng = np.random.default_rng(1)
+    mask = np.zeros((40, 55), dtype=bool)
+    rr, cc = rng.integers(0, 40, 6), rng.integers(0, 55, 6)
+    mask[rr, cc] = True
+    dx_m, dy_m, radius_m = 80.0, 110.0, 520.0
+
+    got = _dilate_disc(mask, radius_m, dx_m, dy_m)
+
+    pts = np.argwhere(mask)
+    expected = np.zeros_like(mask)
+    for r in range(40):
+        for c in range(55):
+            d = np.sqrt(((pts[:, 0] - r) * dy_m) ** 2 + ((pts[:, 1] - c) * dx_m) ** 2).min()
+            expected[r, c] = d <= radius_m
+    assert (got == expected).all()
+
+
+def test_dilate_disc_radius_larger_than_the_grid_covers_everything_reachable():
+    import numpy as np
+
+    from pipeline.exposure import _dilate_disc
+
+    mask = np.zeros((5, 6), dtype=bool)
+    mask[2, 3] = True
+    got = _dilate_disc(mask, radius_m=100_000.0, dx_m=90.0, dy_m=110.0)  # radius >> grid
+    assert got.all()
+
+
+def test_flowline_corridor_mask_handles_a_real_size_50km_corridor_without_huge_memory():
+    """A 50 km flowline across a ~500x500 WorldPop window: the old all-pairs fallback
+    needed rows x cols x flowline-cells floats (gigabytes). This must finish fast."""
+    import time
+
+    from affine import Affine
+
+    from pipeline.exposure import flowline_corridor_mask
+
+    pop_transform = Affine(0.0009, 0, 74.0, 0, -0.0009, 36.6)  # ~100 m pixels
+    shape = (500, 500)
+    # a diagonal flowline of ~1700 cells (30 m steps) crossing the window
+    n = 1700
+    lons = [74.0 + 0.0003 * i * 0.26 for i in range(n)]
+    lats = [36.6 - 0.0003 * i * 0.26 for i in range(n)]
+
+    t = time.time()
+    mask = flowline_corridor_mask(list(zip(lons, lats, strict=True)), 500.0, pop_transform, shape)
+    assert time.time() - t < 10
+    assert mask.any()
+    assert mask.sum() < mask.size / 4  # a corridor, not the whole window
+
+
 # ---------------------------------------------------------------------------
 # Slow / integration tests — require live DEM + WorldPop download
 # ---------------------------------------------------------------------------
@@ -523,7 +582,7 @@ def test_shishper_d8_flowline_traces_hassanabad_nallah():
     Requires: network access to Planetary Computer STAC for GLO-30 DEM tiles.
     Run with: uv run pytest -m slow tests/test_exposure.py
     """
-    from pipeline.dem import fetch_dem_for_flowrouting, downstream_flowline
+    from pipeline.dem import downstream_flowline, fetch_dem_for_flowrouting
     from pipeline.lakes import LAKES
 
     lake = LAKES["shishper"]

@@ -121,8 +121,7 @@ def flowline_corridor_mask(
     For each WorldPop pixel centre, computes the minimum geographic distance to any
     flowline point and marks it True if within corridor_half_width_m.
 
-    Uses scipy.ndimage.distance_transform_edt when available (fast path), otherwise
-    falls back to vectorised numpy distance computation (slower but correct).
+    Pure numpy (see _dilate_disc); no scipy needed.
 
     Args:
         flowline_lonlat: List of (lon, lat) tuples of flowline cell centres.
@@ -155,30 +154,33 @@ def flowline_corridor_mask(
         # No flowline cells fall within the WorldPop window — return empty mask.
         return np.zeros(pop_shape, dtype=bool)
 
-    try:
-        from scipy.ndimage import distance_transform_edt  # noqa: PLC0415
-        # EDT: True cells are "background" (distance computed FROM flowline cells).
-        dist_m = distance_transform_edt(~flowline_raster, sampling=(dy_m, dx_m))
-        return dist_m <= corridor_half_width_m
+    return _dilate_disc(flowline_raster, corridor_half_width_m, dx_m, dy_m)
 
-    except ImportError:
-        logger.warning(
-            "scipy not installed — using slower numpy distance computation for "
-            "flowline corridor mask. Install scipy with: uv pip install 'cryohealth-geo[ml]'"
-        )
-        # Numpy fallback: for each non-flowline pixel, find minimum distance to any
-        # flowline pixel using broadcast. Fine for WorldPop 100m grid (~500×500 in corridor).
-        row_idx, col_idx = np.nonzero(flowline_raster)
-        if len(row_idx) == 0:
-            return np.zeros(pop_shape, dtype=bool)
 
-        r_grid, c_grid = np.meshgrid(np.arange(rows), np.arange(cols), indexing="ij")
-        # Compute distance from each pixel to each flowline pixel, take minimum.
-        # Shape: (rows, cols, n_flowline_cells)
-        dr_m = (r_grid[:, :, np.newaxis] - row_idx[np.newaxis, np.newaxis, :]) * dy_m
-        dc_m = (c_grid[:, :, np.newaxis] - col_idx[np.newaxis, np.newaxis, :]) * dx_m
-        dist_m = np.sqrt(dr_m**2 + dc_m**2).min(axis=2)
-        return dist_m <= corridor_half_width_m
+def _dilate_disc(mask: np.ndarray, radius_m: float, dx_m: float, dy_m: float) -> np.ndarray:
+    """True wherever a pixel centre is within radius_m (Euclidean, on the pixel grid) of
+    any True pixel in mask. Same result as thresholding an exact Euclidean distance
+    transform, but pure numpy (OR of shifted copies, one per offset inside the disc), so
+    it needs no scipy and its memory stays at a few copies of the grid however long the
+    flowline is. An all-pairs distance array (rows x cols x flowline cells) would need
+    gigabytes for a real 50 km corridor."""
+    rows, cols = mask.shape
+    ry = int(radius_m // dy_m)
+    rx = int(radius_m // dx_m)
+    out = mask.copy()
+    for di in range(-ry, ry + 1):
+        for dj in range(-rx, rx + 1):
+            if (di == 0 and dj == 0) or (di * dy_m) ** 2 + (dj * dx_m) ** 2 > radius_m**2:
+                continue
+            if abs(di) >= rows or abs(dj) >= cols:
+                continue  # shifted entirely off the grid: nothing to copy
+            # out[r + di, c + dj] |= mask[r, c]
+            src_r = slice(max(0, -di), rows - max(0, di))
+            dst_r = slice(max(0, di), rows - max(0, -di))
+            src_c = slice(max(0, -dj), cols - max(0, dj))
+            dst_c = slice(max(0, dj), cols - max(0, -dj))
+            out[dst_r, dst_c] |= mask[src_r, src_c]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +240,6 @@ def population_along_flowline(
     dy = pixel_size_y_deg * METERS_PER_DEGREE_LAT
     diag = math.sqrt(dx**2 + dy**2)
 
-    from pipeline.dem import _D8_CODE_TO_DELTA  # noqa: PLC0415
     _code_to_dist = {1: dx, 2: diag, 4: dy, 8: diag, 16: dx, 32: diag, 64: dy, 128: diag}
     corridor_m = sum(
         _code_to_dist.get(int(direction[r, c]), dx) for r, c in flowline[:-1]
@@ -281,7 +282,10 @@ def population_along_flowline(
     return {
         "source": POPULATION_SOURCE_ID,
         "method": "d8_flowline_corridor",
+        "outlet_lon": outlet_lon,
+        "outlet_lat": outlet_lat,
         "corridor_km": round(corridor_km, 2),
+        "max_km": max_km,
         "corridor_half_width_m": corridor_half_width_m,
         "population_along_corridor": round(total_pop, 1),
         "population_within_buffer": round(total_pop, 1),  # backward-compat alias

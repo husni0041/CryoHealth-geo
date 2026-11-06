@@ -137,3 +137,15 @@ of #19). `HAZARD_METHODOLOGY.md` explicitly states this criterion is pending #26
 - Issue #26 (validation): https://github.com/uExel/CryoHealth-geo/issues/26
 - Wang & Liu (2006) — Priority-Flood pit filling algorithm
 - Tarboton (1997) — D-Infinity (referenced for contrast; D8 chosen instead)
+
+---
+
+## Amendment — 2026-11-06
+
+The corridor mask no longer uses `scipy.ndimage.distance_transform_edt`. scipy is not a
+base dependency, and the numpy fallback it fell back to built a rows x cols x flowline-cells
+distance array, which needs gigabytes for a real 50 km corridor. `exposure._dilate_disc`
+replaces both: pure numpy, identical result (tested against a brute-force Euclidean
+threshold), memory of a few grid copies. The live integration tests (`@pytest.mark.slow`)
+are now excluded from the default run (`addopts = -m "not slow"`) because they download
+the DEM and the national WorldPop raster; run them with `pytest -m slow`.

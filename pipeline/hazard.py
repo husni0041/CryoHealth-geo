@@ -135,6 +135,76 @@ def tier_for_score(score: float) -> str:
     return "normal"  # unreachable: TIER_THRESHOLDS always has a 0.0 floor
 
 
+# --- Score confidence (informational only; never affects the score or the tier) ----------
+# A heuristic data-quality number in [0, 1], NOT a statistical confidence interval or a
+# calibrated probability. Like TIER_THRESHOLDS, the two freshness cut-offs are documented
+# starting points, not calibrated against real GLOF outcomes (docs/HAZARD_METHODOLOGY.md).
+CONFIDENCE_METHOD = "input_coverage_x_freshness_v1"
+FRESH_WITHIN_DAYS = OBSERVATION_TOLERANCE_DAYS  # latest scene this recent counts as fully fresh
+STALE_AFTER_DAYS = 90  # a latest scene this old (the long growth window) counts as no freshness
+
+
+def input_coverage(
+    growth_30d: float | None,
+    growth_90d: float | None,
+    anomaly: float | None,
+    dam_type: str,
+) -> float:
+    """Share (0..1) of the score's weighted signals that had real data behind them. The
+    score treats a missing signal as zero risk, so a low value means it leans on gaps.
+    area_growth is half 30-day and half 90-day; a dam type of "unknown" counts as no data;
+    glacier contact, slope and historical GLOF are always read from the lake row/DEM."""
+    present = {
+        "area_growth": ((growth_30d is not None) + (growth_90d is not None)) / 2,
+        "seasonal_anomaly": 1.0 if anomaly is not None else 0.0,
+        "dam_type": 1.0 if dam_type in KNOWN_DAM_TYPES and dam_type != "unknown" else 0.0,
+        "glacier_contact": 1.0,
+        "slope": 1.0,
+        "historical_glof": 1.0,
+    }
+    return sum(WEIGHTS[k] * present[k] for k in WEIGHTS)
+
+
+def observation_freshness(observations: list[tuple[date, float]], as_of: date) -> tuple[float, int | None]:
+    """(freshness 0..1, age in days of the newest scene on/before as_of). 1.0 when the
+    newest scene is within FRESH_WITHIN_DAYS, falling linearly to 0.0 at STALE_AFTER_DAYS.
+    (0.0, None) when there is no scene at all."""
+    latest = _latest_on_or_before(observations, as_of)
+    if latest is None:
+        return 0.0, None
+    age = (as_of - latest[0]).days
+    if age <= FRESH_WITHIN_DAYS:
+        return 1.0, age
+    if age >= STALE_AFTER_DAYS:
+        return 0.0, age
+    return (STALE_AFTER_DAYS - age) / (STALE_AFTER_DAYS - FRESH_WITHIN_DAYS), age
+
+
+def score_confidence(
+    observations: list[tuple[date, float]],
+    as_of: date,
+    growth_30d: float | None,
+    growth_90d: float | None,
+    anomaly: float | None,
+    dam_type: str,
+) -> dict:
+    """Per-score confidence = input coverage x observation freshness, with both factors
+    stored so a reader can see why it is low. See CONFIDENCE_METHOD."""
+    coverage = input_coverage(growth_30d, growth_90d, anomaly, dam_type)
+    freshness, age_days = observation_freshness(observations, as_of)
+    return {
+        "value": round(coverage * freshness, 2),
+        "method": CONFIDENCE_METHOD,
+        "input_coverage": round(coverage, 2),
+        "freshness": round(freshness, 2),
+        "latest_observation_age_days": age_days,
+        "note": (
+            "Heuristic data-quality score (input coverage x observation freshness), not a "
+            "statistical confidence or a calibrated probability. Does not affect the tier."
+        ),
+    }
+
+
 @dataclass(frozen=True)
 class LakeStaticInputs:
     dam_type: str
@@ -195,5 +265,6 @@ def compute_hazard_score(
         },
         "normalized_risks": risks,
         "exposure": exposure,
+        "confidence": score_confidence(observations, as_of, growth_30d, growth_90d, anomaly, static.dam_type),
     }
     return HazardResult(score=score, tier=tier, components=components)

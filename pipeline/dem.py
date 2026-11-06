@@ -33,7 +33,7 @@ from rasterio.merge import merge as rasterio_merge
 from rasterio.windows import from_bounds
 
 if TYPE_CHECKING:
-    import affine  # only for type hints
+    pass  # only for type hints
 
 STAC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1"
 COLLECTION = "cop-dem-glo-30"

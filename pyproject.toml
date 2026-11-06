@@ -31,3 +31,5 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: live integration test (real DEM + WorldPop over the network); run with `-m slow`"]
+addopts = "-m 'not slow'"

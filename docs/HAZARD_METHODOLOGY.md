@@ -97,6 +97,28 @@ Checked highest-first; the first threshold the score meets or exceeds wins:
 | ≥ 0.25 | watch |
 | < 0.25 | normal |
 
+## Score confidence (informational only — does not affect the score or the tier)
+
+Every stored score carries `components.confidence`, a **heuristic data-quality number in
+[0, 1]** that says how much real data the score rests on. It is **not** a statistical
+confidence interval and **not** a calibrated probability.
+
+`value = input_coverage × freshness` (method id `input_coverage_x_freshness_v1`):
+
+- **input_coverage** — the share of the score's weights that had real data. The score
+  treats a missing signal as zero risk (see above), so low coverage means the score leans
+  on gaps. `area_growth` counts half for the 30-day and half for the 90-day growth;
+  `seasonal_anomaly` needs another year's data for that month; a dam type of `unknown`
+  counts as no data; glacier contact, slope and historical GLOF are always available.
+- **freshness** — 1.0 when the newest scene on or before `as_of` is at most 15 days old
+  (`FRESH_WITHIN_DAYS`, the same tolerance as the growth windows), falling linearly to 0.0
+  at 90 days (`STALE_AFTER_DAYS`, the long growth window). No scene at all gives 0.0.
+
+Both factors, the age of the newest scene and a plain-language note are stored beside
+`value`, so a low number can be explained from the database alone. The 15- and 90-day
+cut-offs are documented starting points, like the tier thresholds: not calibrated against
+real GLOF outcomes. Whoever owns the alert policy should confirm or change them.
+
 ## Exposure (prioritization only — does not affect the tier)
 
 Per PRD §8, downstream population exposure informs *prioritization*, not the hazard
@@ -137,6 +159,13 @@ actually lie in the GLOF flood path.
   GLOF-II project reports or ICIMOD would supersede these estimates.
 - Exposure validation against Shishper/Passu GLOF flood footprints is pending
   Issue #26 — see ADR 0003.
+- The confidence number is a heuristic (see above), not statistical; its cut-offs are
+  uncalibrated.
+- Exposure runs the D8 routing on a ~100 km x 100 km DEM window in pure Python/numpy:
+  about 3 to 6 minutes per lake on a cold process (results are cached per process), plus
+  a one-time ~140 MB WorldPop download. It is designed for the scheduled background
+  hazard pass, not for a request/response path.
+- The corridor mask is built with plain numpy (`_dilate_disc`), so scipy is not needed.
 - Facilities/population *within* the corridor aren't broken out by type (school, clinic,
   settlement) — only a total population count.
 - Small, sub-pixel-scale lakes (e.g. Khurdopin, ~0.01–0.17 km²) have genuinely noisy
