@@ -24,8 +24,10 @@ Shishper, 20 km flowline, real Copernicus GLO-30 DEM and WorldPop (2025, 100 m, 
 - Old 5 km square buffer: 21.8.
 So the routing works, but the result is about 2x sensitive to the start point and the outlet coordinates in `pipeline/lakes.py` are not trustworthy ("TODO:verify" in the code).
 
+- The other five lakes at 20 km (start = outlet / lake point): Passu 833 / 847, Ghulkin 1,312 / 1,557, Badswat 1,815 / 1,939, Batura 3.9 / 3.9, Khurdopin 4.5 / 3.1. Within ~20% between starts except Shishper; all starts are at glacier level (2,958 to 5,011 m). Batura and Khurdopin are probably lower bounds because 20 km may stop before the populated valley.
+
 ## Not done / deferred
-- The other five lakes and the 50 km production setting were not run live: this machine has 4 GB RAM and a 50 km window needs about 1 GB (a first full run was stopped by the system for low memory).
+- The 50 km production setting was not run live: this machine has 4 GB RAM and a 50 km window needs about 1 GB (a first full run was stopped by the system for low memory).
 - No validation against a historical flood footprint (geo #25/#26 closed without data).
 - Surveyed dam-toe coordinates for the six lakes (needs a person with imagery or GLOF-II data).
 - Speed: about 3 to 6 minutes per lake on a cold process at 50 km; suits the scheduled pass, not a request path.

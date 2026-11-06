@@ -5,7 +5,7 @@ Session: flowpath-exposure-and-confidence  Model: claude-sonnet-5-5  Branch: fea
 Not merged, not deployed. This branch brings the D8 flow-path exposure (written for #19 by laiba-107, only ever on the unmerged `AI-advances` branch) onto `main`, fixes what would break CI/production, and adds `components.confidence`. Full detail: `sessions/2026-11-06-flowpath-exposure-and-confidence-handoff.md`.
 
 ## Key finding
-Live check on Shishper (real DEM + WorldPop, 20 km): routing works, but the hand-estimated outlet is at 6,252 m (a peak) and the result changes about 2x with the start point (2,434 from the outlet, 5,297 from the lake point, old square buffer 21.8). Treat the number as a model estimate until the outlet coordinates are surveyed. Only 1 of 6 lakes and 20 of 50 km were run live (4 GB machine).
+Live check on Shishper (real DEM + WorldPop, 20 km): routing works, but the hand-estimated outlet is at 6,252 m (a peak) and the result changes about 2x with the start point (2,434 from the outlet, 5,297 from the lake point, old square buffer 21.8). Treat the number as a model estimate until the outlet coordinates are surveyed. All 6 lakes were run live at 20 km, not 50 km (4 GB machine). The other five agree within ~20% between the two starts (Passu 833/847, Ghulkin 1,312/1,557, Badswat 1,815/1,939, Batura 3.9/3.9, Khurdopin 4.5/3.1); every start is at glacier level (2,958 to 5,011 m), not at a lake outlet.
 
 ## Next action
 Review and merge; deploy and run a hazard pass; replace the outlet coordinates in `pipeline/lakes.py`; run the 6 lakes at 50 km on a machine with more memory.

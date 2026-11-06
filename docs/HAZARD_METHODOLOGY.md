@@ -168,8 +168,15 @@ actually lie in the GLOF flood path.
   start: **2,434** from the outlet, **5,297** from the lake point (the old 5 km square
   buffer gave 21.8). So the stored number is a *model estimate that is sensitive to where
   the flowline starts*, not a census count. Replace the outlet coordinates with surveyed
-  dam-toe points, then re-run. The other five lakes and the full 50 km setting were not run
-  live (a 50 km window needs roughly 1 GB). `components.exposure.start_elevation_m` stores
+  dam-toe points, then re-run. The full 50 km setting was not run live (a 50 km window needs
+  roughly 1 GB).
+- **Live check of the other five lakes, 2026-11-06 (20 km flowline, start = hand-estimated
+  outlet / lake point):** Passu 833 / 847, Ghulkin 1,312 / 1,557, Badswat 1,815 / 1,939,
+  Batura 3.9 / 3.9, Khurdopin 4.5 / 3.1. For these five the two starts agree within about
+  20 % (Batura and Khurdopin are near zero either way), so Shishper (2,434 / 5,297) is the
+  outlier. But every start sits at 2,958 to 5,011 m on the DEM, i.e. glacier level, not at a
+  lake outlet. A 20 km corridor may also stop before the populated valley for Batura and
+  Khurdopin, so those two are likely lower bounds. `components.exposure.start_elevation_m` stores
   the DEM elevation at the start so a bad outlet can be spotted from the stored score.
 - The confidence number is a heuristic (see above), not statistical; its cut-offs are
   uncalibrated.
